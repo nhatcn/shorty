@@ -16,8 +16,7 @@ func NewHandler(service Service) *Handler {
 }
 
 type createURLRequest struct {
-	OriginalURL string `json:"original_url"`
-	UserID      int64  `json:"user_id"` 
+	OriginalURL string `json:"original_url"` 
 }
 
 type createURLResponse struct {
@@ -32,7 +31,14 @@ func (h *Handler) CreateShortURL(c *gin.Context) {
 		return
 	}
 
-	shortCode, err := h.service.CreateShortURL(req.UserID, req.OriginalURL)
+	
+	userID, exists := c.Get("userId")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	shortCode, err := h.service.CreateShortURL(userID.(int64), req.OriginalURL)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -42,6 +48,7 @@ func (h *Handler) CreateShortURL(c *gin.Context) {
 		ShortURL: "http://localhost:8080/" + shortCode,
 	})
 }
+
 
 // GET /:code
 func (h *Handler) Redirect(c *gin.Context) {
