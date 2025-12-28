@@ -23,7 +23,7 @@ func (s *JWTService) Generate(userID int64) (string, error) {
 	return token.SignedString([]byte(s.secret))
 }
 
-func (s *JWTService) Validate(tokenStr string) (*jwt.Token, error) {
+func (s *JWTService) Validate(tokenStr string) (int64, error) {
 	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("invalid signing method")
@@ -31,7 +31,22 @@ func (s *JWTService) Validate(tokenStr string) (*jwt.Token, error) {
 		return []byte(s.secret), nil
 	})
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	return token, nil
+
+	if !token.Valid {
+		return 0, errors.New("invalid token")
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return 0, errors.New("invalid claims")
+	}
+
+	userIDFloat, ok := claims["user_id"].(float64)
+	if !ok {
+		return 0, errors.New("user_id not found in token")
+	}
+
+	return int64(userIDFloat), nil
 }

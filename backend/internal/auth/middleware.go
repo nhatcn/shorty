@@ -1,24 +1,35 @@
 package auth
 
 import (
-	"net/http"
+	"github.com/gin-gonic/gin"
 	"strings"
 	"url-shortener/internal/utils"
 )
 
-func Middleware(jwtService *utils.JWTService, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
+func Middleware(jwtService *utils.JWTService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			http.Error(w, "missing token", http.StatusUnauthorized)
+			c.AbortWithStatusJSON(401, gin.H{"error": "missing token"})
 			return
 		}
+
 		token := strings.TrimPrefix(authHeader, "Bearer ")
-		_, err := jwtService.Validate(token)
-		if err != nil {
-			http.Error(w, "invalid token", http.StatusUnauthorized)
+		if token == authHeader {
+			c.AbortWithStatusJSON(401, gin.H{"error": "invalid token format"})
 			return
 		}
-		next.ServeHTTP(w, r)
-	})
+
+		userId, err := jwtService.Validate(token)
+		if err != nil {
+			c.AbortWithStatusJSON(401, gin.H{"error": "invalid token"})
+			return
+		}
+
+
+		c.Set("userId", userId)
+
+		c.Next()
+	}
 }
+

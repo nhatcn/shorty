@@ -1,9 +1,10 @@
 package url
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
+
+	"github.com/gin-gonic/gin"
 )
 
 type Handler struct {
@@ -16,75 +17,82 @@ func NewHandler(service Service) *Handler {
 
 type createURLRequest struct {
 	OriginalURL string `json:"original_url"`
-	UserID      int64  `json:"user_id"` // For demo, in real use from JWT
+	UserID      int64  `json:"user_id"` 
 }
 
 type createURLResponse struct {
 	ShortURL string `json:"short_url"`
 }
 
-func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodPost:
-		h.CreateShortURL(w, r)
-	case http.MethodGet:
-		h.ListURLs(w, r)
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (h *Handler) CreateShortURL(w http.ResponseWriter, r *http.Request) {
+// POST /api/urls
+func (h *Handler) CreateShortURL(c *gin.Context) {
 	var req createURLRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
+
 	shortCode, err := h.service.CreateShortURL(req.UserID, req.OriginalURL)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	resp := createURLResponse{
+
+	c.JSON(http.StatusOK, createURLResponse{
 		ShortURL: "http://localhost:8080/" + shortCode,
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	})
 }
 
-func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request) {
-	shortCode := r.URL.Path[1:]
+// GET /:code
+func (h *Handler) Redirect(c *gin.Context) {
+	shortCode := c.Param("code")
 	if shortCode == "" {
-		http.Error(w, "Not Found", http.StatusNotFound)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not Found"})
 		return
 	}
+
 	originalURL, err := h.service.GetOriginalURL(shortCode)
 	if err != nil {
-		http.Error(w, "URL not found", http.StatusNotFound)
+		c.JSON(http.StatusNotFound, gin.H{"error": "URL not found"})
 		return
 	}
-	http.Redirect(w, r, originalURL, http.StatusFound)
+
+	c.Redirect(http.StatusFound, originalURL)
 }
 
-func (h *Handler) ListURLs(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("user_id")
-	userID, _ := strconv.ParseInt(query, 10, 64)
+// GET /api/urls?user_id=1
+func (h *Handler) ListURLs(c *gin.Context) {
+	userIDStr := c.Query("user_id")
+	userID, _ := strconv.ParseInt(userIDStr, 10, 64)
+
 	urls, err := h.service.ListURLs(userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(urls)
+
+	c.JSON(http.StatusOK, urls)
 }
-func (h *Handler) UserStats(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("user_id")
-	userID, _ := strconv.ParseInt(query, 10, 64)
+
+// GET /api/urls/stats?user_id=1
+func (h *Handler) UserStats(c *gin.Context) {
+	userIDStr := c.Query("user_id")
+	userID, _ := strconv.ParseInt(userIDStr, 10, 64)
+
 	stats, err := h.service.GetUserStats(userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+
+	c.JSON(http.StatusOK, stats)
+}
+func (h *Handler) List(c *gin.Context) {
+	userID, _ := strconv.ParseInt(c.Query("user_id"), 10, 64)
+	urls, err := h.service.ListURLs(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, urls)
 }

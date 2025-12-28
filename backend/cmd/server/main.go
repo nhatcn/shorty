@@ -3,8 +3,9 @@ package main
 import (
 	"database/sql"
 	"log"
-	"net/http"
 
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
 
 	"url-shortener/internal/auth"
@@ -23,7 +24,17 @@ func main() {
 	}
 	defer db.Close()
 
-	// Repositories
+	r := gin.Default()
+
+	// ✅ CORS
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		AllowCredentials: true,
+	}))
+
+	// ===== init repos & services =====
 	userRepo := user.NewRepository(db)
 	authService := auth.NewService(userRepo)
 	authHandler := auth.NewHandler(authService)
@@ -34,20 +45,31 @@ func main() {
 	urlService := url.NewService(urlRepo, clickService)
 	urlHandler := url.NewHandler(urlService)
 
-	// Routes
-	mux := http.NewServeMux()
+	// ===== routes =====
+	api := r.Group("/api")
+	{
+		api.POST("/register", authHandler.Register)
+		api.POST("/login", authHandler.Login)
 
-	// Auth
-	mux.HandleFunc("/api/register", authHandler.Register)
-	mux.HandleFunc("/api/login", authHandler.Login)
+		api.POST("/urls",
+			auth.Middleware(auth.JWTService),
+			urlHandler.CreateShortURL,
+		)
 
-	// URL (with auth middleware)
-	mux.Handle("/api/urls", auth.Middleware(auth.JWTService, urlHandler))
-	mux.Handle("/api/urls/stats", auth.Middleware(auth.JWTService, http.HandlerFunc(urlHandler.UserStats)))
+		api.GET("/urls",
+			auth.Middleware(auth.JWTService),
+			urlHandler.List,
+		)
 
-	// Redirect
-	mux.HandleFunc("/", urlHandler.Redirect)
+		api.GET("/urls/stats",
+			auth.Middleware(auth.JWTService),
+			urlHandler.UserStats,
+		)
+	}
 
-	log.Println("Server running at :8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	// redirect short url
+	r.GET("/:code", urlHandler.Redirect)
+
+	log.Println("🚀 Server running at :8080")
+	r.Run(":8080")
 }
