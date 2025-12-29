@@ -7,7 +7,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
-
+	"github.com/cloudinary/cloudinary-go/v2"
 	"url-shortener/internal/auth"
 	"url-shortener/internal/click"
 	"url-shortener/internal/url"
@@ -33,7 +33,10 @@ func main() {
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		AllowCredentials: true,
 	}))
-
+	cld, err := cloudinary.NewFromParams("dh7bridgn", "958111531242264", "QFTx26bP9MxnA_rzDpZUrcezwxI")
+	if err != nil {
+		log.Fatal("Cloudinary init error:", err)
+	}
 	// ===== init repos & services =====
 	userRepo := user.NewRepository(db)
 	authService := auth.NewService(userRepo)
@@ -42,7 +45,7 @@ func main() {
 	urlRepo := url.NewRepository(db)
 	clickRepo := click.NewRepository(db)
 	clickService := click.NewService(clickRepo)
-	urlService := url.NewService(urlRepo, clickService)
+	urlService := url.NewService(urlRepo, clickService, cld)
 	urlHandler := url.NewHandler(urlService)
 
 	// ===== routes =====
@@ -58,16 +61,20 @@ func main() {
 
 		api.GET("/urls",
 			auth.Middleware(auth.JWTService),
-			urlHandler.List,
+			urlHandler.ListURLs,
 		)
 
 		api.GET("/urls/stats",
 			auth.Middleware(auth.JWTService),
 			urlHandler.UserStats,
 		)
+		api.DELETE("/urls/:id",
+			auth.Middleware(auth.JWTService),
+			urlHandler.DeleteURL,
+		)
 	}
 
-	// redirect short url
+	
 	r.GET("/:code", urlHandler.Redirect)
 
 	log.Println("🚀 Server running at :8080")

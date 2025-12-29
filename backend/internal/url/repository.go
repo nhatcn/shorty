@@ -1,12 +1,17 @@
 package url
 
-import "database/sql"
-import "url-shortener/internal/click"
+import (
+	"database/sql"
+	"time"
+	"url-shortener/internal/click"
+)
+
 type Repository interface {
-	Create(userID int64, originalURL, shortCode string) error
+	Create(userID int64, originalURL, shortCode, qrURL string, expiresAt time.Time) error
 	GetByShortCode(shortCode string) (*URL, error)
 	List(userID int64) ([]*URL, error)
 	ListWithClicks(userID int64, clickRepo click.Repository) ([]*URLStats, error)
+	DeleteByID(id int64) error
 }
 
 type repository struct {
@@ -17,15 +22,18 @@ func NewRepository(db *sql.DB) Repository {
 	return &repository{db: db}
 }
 
-func (r *repository) Create(userID int64, originalURL, shortCode string) error {
-	_, err := r.db.Exec("INSERT INTO urls (user_id, original_url, short_code) VALUES ($1,$2,$3)", userID, originalURL, shortCode)
+func (r *repository) Create(userID int64, originalURL, shortCode, qrURL string, expiresAt time.Time) error {
+	_, err := r.db.Exec(
+		"INSERT INTO urls (user_id, original_url, short_code, qr_url, expires_at) VALUES ($1,$2,$3,$4,$5)",
+		userID, originalURL, shortCode, qrURL, expiresAt,
+	)
 	return err
 }
 
 func (r *repository) GetByShortCode(shortCode string) (*URL, error) {
-	row := r.db.QueryRow("SELECT id,user_id,original_url,short_code,created_at FROM urls WHERE short_code=$1", shortCode)
+	row := r.db.QueryRow("SELECT id,user_id,original_url,short_code,qr_url,created_at,expires_at FROM urls WHERE short_code=$1", shortCode)
 	u := &URL{}
-	if err := row.Scan(&u.ID, &u.UserID, &u.OriginalURL, &u.ShortCode, &u.CreatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.UserID, &u.OriginalURL, &u.ShortCode, &u.QRURL, &u.CreatedAt, &u.ExpiresAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -35,23 +43,25 @@ func (r *repository) GetByShortCode(shortCode string) (*URL, error) {
 }
 
 func (r *repository) List(userID int64) ([]*URL, error) {
-	rows, err := r.db.Query("SELECT id,user_id,original_url,short_code,created_at FROM urls WHERE user_id=$1", userID)
+	rows, err := r.db.Query("SELECT id,user_id,original_url,short_code,qr_url,created_at,expires_at FROM urls WHERE user_id=$1", userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+
 	var urls []*URL
 	for rows.Next() {
 		u := &URL{}
-		if err := rows.Scan(&u.ID, &u.UserID, &u.OriginalURL, &u.ShortCode, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.UserID, &u.OriginalURL, &u.ShortCode, &u.QRURL, &u.CreatedAt, &u.ExpiresAt); err != nil {
 			return nil, err
 		}
 		urls = append(urls, u)
 	}
 	return urls, nil
 }
+
 func (r *repository) ListWithClicks(userID int64, clickRepo click.Repository) ([]*URLStats, error) {
-	rows, err := r.db.Query("SELECT id, original_url, short_code FROM urls WHERE user_id=$1", userID)
+	rows, err := r.db.Query("SELECT id, original_url, short_code, qr_url FROM urls WHERE user_id=$1", userID)
 	if err != nil {
 		return nil, err
 	}
@@ -60,16 +70,25 @@ func (r *repository) ListWithClicks(userID int64, clickRepo click.Repository) ([
 	var stats []*URLStats
 	for rows.Next() {
 		var u URL
-		if err := rows.Scan(&u.ID, &u.OriginalURL, &u.ShortCode); err != nil {
+		if err := rows.Scan(&u.ID, &u.OriginalURL, &u.ShortCode, &u.QRURL); err != nil {
 			return nil, err
 		}
 		count, _ := clickRepo.Count(u.ID)
 		stats = append(stats, &URLStats{
 			OriginalURL: u.OriginalURL,
 			ShortURL:    "http://localhost:8080/" + u.ShortCode,
+			QRURL:       u.QRURL,
 			Clicks:      count,
 		})
 	}
 	return stats, nil
 }
 
+func (r *repository) DeleteByID(id int64) error {
+    _, err := r.db.Exec("DELETE FROM clicks WHERE url_id=$1", id)
+    if err != nil {
+        return err
+    }
+    _, err = r.db.Exec("DELETE FROM urls WHERE id=$1", id)
+    return err
+}

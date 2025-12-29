@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Copy, Link2, TrendingUp, Github, ExternalLink, LogIn, LogOut } from 'lucide-react';
+import { Copy, Link2, TrendingUp, Github, ExternalLink, LogIn, LogOut, Trash2 } from 'lucide-react';
 
 const API_BASE_URL = 'http://localhost:8080';
 
@@ -17,10 +17,12 @@ export default function ShortyApp() {
   const [loading, setLoading] = useState(false);
   const [links, setLinks] = useState([]);
   const [copied, setCopied] = useState(false);
+  const [copiedLinkId, setCopiedLinkId] = useState(null);
   const [error, setError] = useState('');
   const [userId, setUserId] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loadingLinks, setLoadingLinks] = useState(false);
+  const [expiryDays, setExpiryDays] = useState(7);
 
   // Check authentication on mount
   useEffect(() => {
@@ -52,19 +54,21 @@ export default function ShortyApp() {
         const data = await response.json();
         // Transform API response to match component structure
         const transformedLinks = Array.isArray(data) ? data.map((item, index) => ({
-          id: index + Date.now(),
+          id: item.id ,
           shortCode: item.short_url.split('/').pop(),
           shortUrl: item.short_url,
           originalUrl: item.original_url,
           clicks: item.clicks || 0,
-          createdAt: new Date().toISOString(),
-          preview: null
-        })) : [];
+          createdAt: new Date(item.created_at).toISOString().split('T')[0] ,
+          expiresAt: new Date(item.expires_at).toISOString().split('T')[0],
+          qrUrl: item.qr_url || null
+        })).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) : [];
         setLinks(transformedLinks);
       } else {
         setLinks([]);
       }
     } catch (err) {
+
       console.error('Failed to fetch links:', err);
       setLinks([]);
     } finally {
@@ -87,6 +91,11 @@ export default function ShortyApp() {
     setError('');
     
     try {
+      // Calculate expiry date
+      const expiryDate = new Date();
+      expiryDate.setDate(expiryDate.getDate() + expiryDays);
+      const expiresAt = expiryDate.toISOString();
+
       const response = await fetch(`${API_BASE_URL}/api/urls`, {
         method: 'POST',
         headers: {
@@ -94,17 +103,20 @@ export default function ShortyApp() {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
         body: JSON.stringify({
-          original_url: url
+          original_url: url,
+          expires_at: expiresAt
         })
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        try {
-          const errorJson = JSON.parse(errorText);
-          throw new Error(errorJson.error || 'Failed to shorten URL');
-        } catch (e) {
-          throw new Error(errorText || 'Failed to shorten URL');
+        if (response.status === 400) {
+          throw new Error('Invalid URL.');
+        } else if (response.status === 401) {
+          throw new Error('Authentication failed. Please login again.');
+        } else if (response.status === 500) {
+          throw new Error('Server error. Please try again later.');
+        } else {
+          throw new Error('Failed to shorten URL. Please try again.');
         }
       }
 
@@ -120,11 +132,14 @@ export default function ShortyApp() {
         originalUrl: url,
         clicks: data.clicks || 0,
         createdAt: data.created_at || new Date().toISOString(),
-        preview: data.preview || null
+        expiresAt: data.expires_at || null,
+        preview: data.preview || null,
+        qrUrl: data.qr_url || null
       };
       
       setLinks(prevLinks => [newLink, ...prevLinks]);
       setUrl('');
+      setExpiryDays(7);
       
       // Refresh links list from API
       fetchLinks();
@@ -135,10 +150,45 @@ export default function ShortyApp() {
     }
   };
 
-  const copyToClipboard = (text) => {
+  const copyToClipboard = (text, linkId = null) => {
     navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (linkId) {
+      setCopiedLinkId(linkId);
+      setTimeout(() => setCopiedLinkId(null), 2000);
+    } else {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleDelete = async (linkId) => {
+    if(alert('Are you sure you want to delete this link?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/urls/${linkId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (response.ok) {
+        // Remove link from state
+        setLinks(prevLinks => prevLinks.filter(link => link.id !== linkId));
+        
+        // If the deleted link was the most recent one, clear the shortUrl display
+        if (links[0]?.id === linkId) {
+          setShortUrl('');
+        }
+      } else {
+        alert('Failed to delete link. Please try again.');
+      }
+    } catch (err) {
+      console.error('Failed to delete link:', err);
+      alert('Failed to delete link. Please try again.');
+    }
   };
 
   const handleLogin = () => {
@@ -159,6 +209,11 @@ export default function ShortyApp() {
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const isExpired = (expiresAt) => {
+    if (!expiresAt) return false;
+    return new Date(expiresAt) < new Date();
   };
 
   return (
@@ -256,6 +311,68 @@ export default function ShortyApp() {
               </div>
             </div>
 
+            {/* Expiry Options */}
+            {isAuthenticated && (
+              <div className="mt-3">
+                <label className="form-label small text-muted fw-semibold">Link Expiry</label>
+                <div className="btn-group w-100" role="group">
+                  <input 
+                    type="radio" 
+                    className="btn-check" 
+                    name="expiry" 
+                    id="expiry-7" 
+                    autoComplete="off"
+                    checked={expiryDays === 7}
+                    onChange={() => setExpiryDays(7)}
+                  />
+                  <label className="btn btn-outline-secondary" htmlFor="expiry-7">7 Days</label>
+
+                  <input 
+                    type="radio" 
+                    className="btn-check" 
+                    name="expiry" 
+                    id="expiry-15" 
+                    autoComplete="off"
+                    checked={expiryDays === 15}
+                    onChange={() => setExpiryDays(15)}
+                  />
+                  <label className="btn btn-outline-secondary" htmlFor="expiry-15">15 Days</label>
+
+                  <input 
+                    type="radio" 
+                    className="btn-check" 
+                    name="expiry" 
+                    id="expiry-30" 
+                    autoComplete="off"
+                    checked={expiryDays === 30}
+                    onChange={() => setExpiryDays(30)}
+                  />
+                  <label className="btn btn-outline-secondary" htmlFor="expiry-30">30 Days</label>
+
+                  <input 
+                    type="radio" 
+                    className="btn-check" 
+                    name="expiry" 
+                    id="expiry-90" 
+                    autoComplete="off"
+                    checked={expiryDays === 90}
+                    onChange={() => setExpiryDays(90)}
+                  />
+                  <label className="btn btn-outline-secondary" htmlFor="expiry-90">90 Days</label>
+                  <input 
+                    type="radio" 
+                    className="btn-check" 
+                    name="expiry" 
+                    id="expiry-120" 
+                    autoComplete="off"
+                    checked={expiryDays === 120}
+                    onChange={() => setExpiryDays(120)}
+                  />
+                  <label className="btn btn-outline-secondary" htmlFor="expiry-120">120 Days</label>
+                </div>
+              </div>
+            )}
+
             {/* Error */}
             {error && (
               <div className="alert alert-danger mt-3 mb-0" role="alert">
@@ -268,20 +385,42 @@ export default function ShortyApp() {
               <div className="alert alert-success mt-4 mb-0" role="alert">
                 <div className="d-flex justify-content-between align-items-center mb-2">
                   <small className="fw-semibold">YOUR SHORTENED URL</small>
+                  {links[0]?.expiresAt && (
+                    <small className="text-muted">
+                      Expires on {formatDate(links[0].expiresAt)}
+                    </small>
+                  )}
                 </div>
-                <div className="d-flex align-items-center bg-white rounded p-3">
-                  <div className="flex-grow-1 me-3">
-                    <a href={shortUrl} className="text-primary fw-semibold text-decoration-none fs-5" target="_blank" rel="noopener noreferrer">
-                      {shortUrl}
-                    </a>
+                <div className="row g-3">
+                  <div className="col-md-8">
+                    <div className="d-flex align-items-center bg-white rounded p-3">
+                      <div className="flex-grow-1 me-3">
+                        <a href={shortUrl} className="text-primary fw-semibold text-decoration-none fs-5" target="_blank" rel="noopener noreferrer">
+                          {shortUrl}
+                        </a>
+                      </div>
+                      <button 
+                        className="btn btn-outline-primary btn-sm"
+                        onClick={() => copyToClipboard(shortUrl)}
+                      >
+                        <Copy size={16} className="me-1" />
+                        {copied ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
                   </div>
-                  <button 
-                    className="btn btn-outline-primary btn-sm"
-                    onClick={() => copyToClipboard(shortUrl)}
-                  >
-                    <Copy size={16} className="me-1" />
-                    {copied ? 'Copied!' : 'Copy'}
-                  </button>
+                  {links[0]?.qrUrl && (
+                    <div className="col-md-4">
+                      <div className="bg-white rounded p-3 text-center">
+                        <img 
+                          src={links[0].qrUrl} 
+                          alt="QR Code" 
+                          className="img-fluid"
+                          style={{ maxWidth: '120px', height: 'auto' }}
+                        />
+                        <div className="small text-muted mt-2">Scan QR Code</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -309,32 +448,53 @@ export default function ShortyApp() {
                   {links.map((link) => (
                     <div key={link.id} className="list-group-item px-0 py-3 border-bottom">
                       <div className="row align-items-start">
-                        {/* Preview Image */}
-                        {link.preview && (
+                        {/* Preview Image or QR Code */}
+                        {(link.preview || link.qrUrl) && (
                           <div className="col-md-2 mb-3 mb-md-0">
-                            <img 
-                              src={link.preview} 
-                              alt="Link preview"
-                              className="img-fluid rounded"
-                              style={{ width: '100%', height: '80px', objectFit: 'cover' }}
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                              }}
-                            />
+                            {link.qrUrl ? (
+                              <img 
+                                src={link.qrUrl} 
+                                alt="QR Code"
+                                className="img-fluid rounded border"
+                                style={{ width: '100%', height: '80px', objectFit: 'contain', padding: '8px' }}
+                              />
+                            ) : (
+                              <img 
+                                src={link.preview} 
+                                alt="Link preview"
+                                className="img-fluid rounded"
+                                style={{ width: '100%', height: '80px', objectFit: 'cover' }}
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                }}
+                              />
+                            )}
                           </div>
                         )}
                         
                         {/* Link Info */}
-                        <div className={link.preview ? "col-md-6" : "col-md-7"}>
+                        <div className={(link.preview || link.qrUrl) ? "col-md-6" : "col-md-7"}>
                           <div className="mb-2">
                             <a href={link.shortUrl} className="text-decoration-none fw-semibold text-dark d-inline-flex align-items-center" target="_blank" rel="noopener noreferrer">
                               {link.shortUrl}
                               <ExternalLink size={14} className="ms-2 text-muted" />
                             </a>
+                            {isExpired(link.expiresAt) && (
+                              <span className="badge bg-danger ms-2">Expired</span>
+                            )}
                           </div>
                           <div className="small text-muted text-truncate" style={{ maxWidth: '400px' }}>
                             {link.originalUrl}
                           </div>
+                          {link.expiresAt && (
+                            <div className="small text-muted mt-1">
+                              {isExpired(link.expiresAt) ? (
+                                <span className="text-danger">Expired on {formatDate(link.expiresAt)}</span>
+                              ) : (
+                                <span>Expires on {formatDate(link.expiresAt)}</span>
+                              )}
+                            </div>
+                          )}
                         </div>
                         
                         {/* Stats */}
@@ -351,13 +511,23 @@ export default function ShortyApp() {
                         
                         {/* Actions */}
                         <div className="col-md-2 text-end">
-                          <button 
-                            className="btn btn-outline-secondary btn-sm"
-                            onClick={() => copyToClipboard(link.shortUrl)}
-                          >
-                            <Copy size={14} className="me-1" />
-                            Copy
-                          </button>
+                          <div className="d-flex gap-2 justify-content-end">
+                            <button 
+                              className="btn btn-outline-secondary btn-sm"
+                              onClick={() => copyToClipboard(link.shortUrl, link.id)}
+                              disabled={isExpired(link.expiresAt)}
+                            >
+                              <Copy size={14} className="me-1" />
+                              {copiedLinkId === link.id ? 'Copied!' : 'Copy'}
+                            </button>
+                            <button 
+                              className="btn btn-outline-danger btn-sm"
+                              onClick={() => handleDelete(link.id)}
+                              title="Delete link"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>

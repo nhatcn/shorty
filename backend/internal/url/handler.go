@@ -3,7 +3,7 @@ package url
 import (
 	"net/http"
 	"strconv"
-
+	 "time"
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,11 +16,13 @@ func NewHandler(service Service) *Handler {
 }
 
 type createURLRequest struct {
-	OriginalURL string `json:"original_url"` 
+	OriginalURL string `json:"original_url"`
+	ExpiresAt   time.Time `json:"expires_at"`
 }
 
 type createURLResponse struct {
 	ShortURL string `json:"short_url"`
+	QRURL    string `json:"qr_url"`
 }
 
 // POST /api/urls
@@ -31,14 +33,13 @@ func (h *Handler) CreateShortURL(c *gin.Context) {
 		return
 	}
 
-	
 	userID, exists := c.Get("userId")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
-	shortCode, err := h.service.CreateShortURL(userID.(int64), req.OriginalURL)
+	shortCode, qrURL, err := h.service.CreateShortURL(userID.(int64), req.OriginalURL, req.ExpiresAt)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -46,9 +47,9 @@ func (h *Handler) CreateShortURL(c *gin.Context) {
 
 	c.JSON(http.StatusOK, createURLResponse{
 		ShortURL: "http://localhost:8080/" + shortCode,
+		QRURL:    qrURL,
 	})
 }
-
 
 // GET /:code
 func (h *Handler) Redirect(c *gin.Context) {
@@ -94,12 +95,19 @@ func (h *Handler) UserStats(c *gin.Context) {
 
 	c.JSON(http.StatusOK, stats)
 }
-func (h *Handler) List(c *gin.Context) {
-	userID, _ := strconv.ParseInt(c.Query("user_id"), 10, 64)
-	urls, err := h.service.ListURLs(userID)
+
+func (h *Handler) DeleteURL(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+		return
+	}
+
+	if err := h.service.DeleteURL(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, urls)
+
+	c.JSON(http.StatusOK, gin.H{"message": "URL deleted"})
 }

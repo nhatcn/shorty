@@ -7,5 +7,7 @@ type URL struct {
 	UserID      int64
 	OriginalURL string
 	ShortCode   string
+	QRURL       string
 	CreatedAt   time.Time
+	ExpiresAt   time.Time
 }
