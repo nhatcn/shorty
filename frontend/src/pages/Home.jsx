@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Copy, Link2, TrendingUp, Github, ExternalLink, LogIn, LogOut, Trash2 } from 'lucide-react';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = process.env.BE_URL ;
 
-// Cookie utility functions
+
 const getCookie = (name) => {
   const value = `; ${document.cookie}`;
   const parts = value.split(`; ${name}=`);
@@ -24,7 +24,7 @@ export default function ShortyApp() {
   const [loadingLinks, setLoadingLinks] = useState(false);
   const [expiryDays, setExpiryDays] = useState(7);
 
-  // Check authentication on mount
+
   useEffect(() => {
     const userIdFromCookie = getCookie('userId');
     if (userIdFromCookie) {
@@ -33,7 +33,7 @@ export default function ShortyApp() {
     }
   }, []);
 
-  // Fetch links when authenticated
+
   useEffect(() => {
     if (isAuthenticated && userId) {
       fetchLinks();
@@ -52,7 +52,7 @@ export default function ShortyApp() {
       });
       if (response.ok) {
         const data = await response.json();
-        // Transform API response to match component structure
+
         const transformedLinks = Array.isArray(data) ? data.map((item, index) => ({
           id: item.id ,
           shortCode: item.short_url.split('/').pop(),
@@ -91,7 +91,7 @@ export default function ShortyApp() {
     setError('');
     
     try {
-      // Calculate expiry date
+
       const expiryDate = new Date();
       expiryDate.setDate(expiryDate.getDate() + expiryDays);
       const expiresAt = expiryDate.toISOString();
@@ -140,8 +140,6 @@ export default function ShortyApp() {
       setLinks(prevLinks => [newLink, ...prevLinks]);
       setUrl('');
       setExpiryDays(7);
-      
-      // Refresh links list from API
       fetchLinks();
     } catch (err) {
       setError(err.message);
@@ -175,10 +173,9 @@ export default function ShortyApp() {
       });
 
       if (response.ok) {
-        // Remove link from state
+   
         setLinks(prevLinks => prevLinks.filter(link => link.id !== linkId));
         
-        // If the deleted link was the most recent one, clear the shortUrl display
         if (links[0]?.id === linkId) {
           setShortUrl('');
         }
@@ -192,12 +189,12 @@ export default function ShortyApp() {
   };
 
   const handleLogin = () => {
-    // Redirect to login page
+  
     window.location.href = '/login';
   };
 
   const handleLogout = () => {
-    // Clear cookies and localStorage
+  
     document.cookie = 'userId=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     localStorage.removeItem('token');
     setUserId(null);
@@ -218,7 +215,7 @@ export default function ShortyApp() {
 
   return (
     <div className="min-vh-100" style={{ backgroundColor: '#f8f9fa' }}>
-      {/* Header */}
+
       <nav className="navbar navbar-light bg-white border-bottom">
         <div className="container-fluid px-4">
           <a className="navbar-brand d-flex align-items-center" href="#">

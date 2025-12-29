@@ -2,7 +2,7 @@ package auth
 
 import (
 	"errors"
-
+	"os"
 	"url-shortener/internal/user"
 	"url-shortener/internal/utils"
 )
@@ -20,16 +20,16 @@ func NewService(userRepo user.Repository) Service {
 	return &service{userRepo: userRepo}
 }
 
-// JWT service (nên đưa vào env sau)
-var JWTService = utils.NewJWTService("secret-key")
 
-// ===== Response =====
+var JWTService = utils.NewJWTService(os.Getenv("JWT_SECRET"))
+
+
 type LoginResponse struct {
 	Token  string `json:"token"`
 	UserID int64  `json:"userId"`
 }
 
-// ===== Service methods =====
+
 
 func (s *service) Register(username, password string) error {
 	exists, _ := s.userRepo.GetByUsername(username)

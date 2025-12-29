@@ -3,11 +3,14 @@ package main
 import (
 	"database/sql"
 	"log"
+	"os"
+	"time"
 
+	"github.com/cloudinary/cloudinary-go/v2"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	_ "github.com/lib/pq"
-	"github.com/cloudinary/cloudinary-go/v2"
+	"github.com/joho/godotenv"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"url-shortener/internal/auth"
 	"url-shortener/internal/click"
 	"url-shortener/internal/url"
@@ -15,29 +18,63 @@ import (
 )
 
 func main() {
-	db, err := sql.Open(
-		"postgres",
-		"host=localhost port=5432 user=postgres password=123 dbname=urlshortener sslmode=disable",
-	)
+	// Load .env
+	err := godotenv.Load()
 	if err != nil {
-		log.Fatal(err)
+		log.Println("No .env file found, relying on system env / Fly secrets")
+	}
+
+	// Get env vars
+	dbURL := mustGetEnv("DATABASE_URL")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	frontendURL := mustGetEnv("FRONTEND_URL")
+
+	// Connect DB với pgx và config tốt hơn
+	db, err := sql.Open("pgx", dbURL)
+	if err != nil {
+		log.Fatal("❌ Failed to open DB:", err)
 	}
 	defer db.Close()
 
+	// Set connection pool limits (quan trọng cho Neon!)
+	db.SetMaxOpenConns(10)           // Neon pooler có giới hạn
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(5 * time.Minute)
+
+	// Ping DB với timeout
+	log.Println("🔄 Connecting to database...")
+	if err := db.Ping(); err != nil {
+		log.Printf("❌ Cannot connect to DB: %v", err)
+		log.Fatal(err)
+	}
+	log.Println("✅ DB connection successful")
+
+	// Gin setup
 	r := gin.Default()
 
-	// ✅ CORS
+	// CORS
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowOrigins:     []string{frontendURL},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		AllowCredentials: true,
 	}))
-	cld, err := cloudinary.NewFromParams("dh7bridgn", "958111531242264", "QFTx26bP9MxnA_rzDpZUrcezwxI")
+
+	// Cloudinary
+	cld, err := cloudinary.NewFromParams(
+		mustGetEnv("CLOUDINARY_CLOUD_NAME"),
+		mustGetEnv("CLOUDINARY_API_KEY"),
+		mustGetEnv("CLOUDINARY_API_SECRET"),
+	)
 	if err != nil {
-		log.Fatal("Cloudinary init error:", err)
+		log.Fatal("❌ Cloudinary init error:", err)
 	}
-	// ===== init repos & services =====
+
+	// Repositories & Services
 	userRepo := user.NewRepository(db)
 	authService := auth.NewService(userRepo)
 	authHandler := auth.NewHandler(authService)
@@ -48,7 +85,7 @@ func main() {
 	urlService := url.NewService(urlRepo, clickService, cld)
 	urlHandler := url.NewHandler(urlService)
 
-	// ===== routes =====
+	// Routes
 	api := r.Group("/api")
 	{
 		api.POST("/register", authHandler.Register)
@@ -68,15 +105,23 @@ func main() {
 			auth.Middleware(auth.JWTService),
 			urlHandler.UserStats,
 		)
+
 		api.DELETE("/urls/:id",
 			auth.Middleware(auth.JWTService),
 			urlHandler.DeleteURL,
 		)
 	}
 
-	
 	r.GET("/:code", urlHandler.Redirect)
 
-	log.Println("🚀 Server running at :8080")
-	r.Run(":8080")
+	log.Println("🚀 Server running at :" + port)
+	r.Run(":" + port)
+}
+
+func mustGetEnv(key string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		log.Fatalf("❌ Missing env var: %s", key)
+	}
+	return value
 }

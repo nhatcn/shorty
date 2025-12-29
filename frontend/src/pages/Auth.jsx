@@ -1,49 +1,58 @@
 import React, { useState } from 'react';
 import { setCookie } from '../utils/cookieUltil';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = process.env.BE_URL ;
 
 const authAPI = {
   register: async (username, password) => {
-    const response = await fetch(`${API_BASE_URL}/api/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      try {
-        const errorJson = JSON.parse(errorText);
-        throw new Error(errorJson.error || 'Registration failed');
-      } catch (e) {
-        throw new Error(errorText || 'Registration failed');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Wrong username or password');
+        }
+        throw new Error('Network error or server issue');
       }
+      
+      return response;
+    } catch (error) {
+      if (error.message === 'Wrong username or password') {
+        throw error;
+      }
+      throw new Error('Network error. Please check your connection.');
     }
-    
-    return response;
   },
 
   login: async (username, password) => {
-    const response = await fetch(`${API_BASE_URL}/api/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      try {
-        const errorJson = JSON.parse(errorText);
-        throw new Error(errorJson.error || 'Login failed');
-      } catch (e) {
-        throw new Error(errorText || 'Login failed');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Wrong username or password');
+        }
+        throw new Error('Network error or server issue');
       }
+      
+      const data = await response.json();
+      setCookie('userId', data.userId);
+      localStorage.setItem('token', data.token);
+      return data;
+    } catch (error) {
+      if (error.message === 'Wrong username or password') {
+        throw error;
+      }
+      throw new Error('Network error. Please check your connection.');
     }
-    const data = await response.json();
-    setCookie('userId', data.userId);
-    localStorage.setItem('token', data.token);
-    return data;
   }
 };
 
