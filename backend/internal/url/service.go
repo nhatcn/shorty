@@ -8,15 +8,15 @@ import (
 	"fmt"
 	"math/big"
 	"net/url"
+	"os"
 	"strings"
 	"time"
-	"os"
 	"url-shortener/internal/click"
 
 	"github.com/cloudinary/cloudinary-go/v2"
 	"github.com/cloudinary/cloudinary-go/v2/api/uploader"
+
 	"github.com/skip2/go-qrcode"
-	"github.com/lib/pq" // PostgreSQL error codes
 )
 
 type Service interface {
@@ -59,13 +59,11 @@ var blacklistedDomains = []string{
 	"local",
 }
 
-
 func (s *service) CreateShortURL(userID int64, originalURL string, expiresAt time.Time) (string, string, error) {
 
 	if err := validateURL(originalURL); err != nil {
 		return "", "", err
 	}
-
 
 	if expiresAt.Before(time.Now()) {
 		return "", "", errors.New("expiration date must be in the future")
@@ -84,73 +82,51 @@ func (s *service) CreateShortURL(userID int64, originalURL string, expiresAt tim
 		return "", "", fmt.Errorf("failed to check existing URL")
 	}
 
-
 	if existingURL != nil {
 
 		if existingURL.ExpiresAt.After(time.Now()) {
 			return existingURL.ShortCode, existingURL.QRURL, nil
 		}
-	
+
 	}
 
 	return s.createNewShortURL(userID, originalURL, expiresAt)
 }
 
-
 func (s *service) createNewShortURL(userID int64, originalURL string, expiresAt time.Time) (string, string, error) {
-	maxRetries := 5
-	baseURL := os.Getenv("BACKEND_URL"+"/")
+	baseURL := os.Getenv("FRONTEND_URL")
 	if baseURL == "" {
-		baseURL = "http://localhost:8080/"
+		baseURL = "https://shorty-black.vercel.app"
+	}
+	baseURL += "/"
+
+	id, err := s.repo.Create(userID, originalURL, "", "", expiresAt)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create URL record: %w", err)
 	}
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	shortCode := encodeBase62(id)
+	shortURL := baseURL + shortCode
 
-		shortCode := generateShortCode(6)
-		shortURL := baseURL + shortCode
-
-
-		qrBytes, err := qrcode.Encode(shortURL, qrcode.Medium, 256)
-		if err != nil {
-			return "", "", fmt.Errorf("failed to generate QR code")
-		}
-
-		uploadResp, err := s.cld.Upload.Upload(context.Background(), bytes.NewReader(qrBytes), uploader.UploadParams{
-			PublicID: "qr_" + shortCode,
-			Folder:   "qr_codes",
-		})
-		if err != nil {
-			return "", "", fmt.Errorf("failed to upload QR code")
-		}
-
-		err = s.repo.Create(userID, originalURL, shortCode, uploadResp.SecureURL, expiresAt)
-		if err == nil {
-			return shortCode, uploadResp.SecureURL, nil
-		}
-		if pqErr, ok := err.(*pq.Error); ok {
-			switch pqErr.Code {
-			case "23505": 
-				if strings.Contains(pqErr.Message, "short_code") {
-
-					continue
-				}
-				if strings.Contains(pqErr.Message, "user_original_url") {
-
-					existingURL, fetchErr := s.repo.FindExistingURL(userID, originalURL)
-					if fetchErr == nil && existingURL != nil {
-						return existingURL.ShortCode, existingURL.QRURL, nil
-					}
-				
-					continue
-				}
-			}
-		}
-
-		
-		return "", "", fmt.Errorf("database error")
+	qrBytes, err := qrcode.Encode(shortURL, qrcode.Medium, 256)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate QR code: %w", err)
 	}
 
-	return "", "", errors.New("failed to generate unique short code after multiple attempts")
+	uploadResp, err := s.cld.Upload.Upload(context.Background(), bytes.NewReader(qrBytes), uploader.UploadParams{
+		PublicID: "qr_" + shortCode,
+		Folder:   "qr_codes",
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("failed to upload QR code: %w", err)
+	}
+
+	err = s.repo.UpdateShortCodeAndQR(id, shortCode, uploadResp.SecureURL)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to update short code and QR URL: %w", err)
+	}
+
+	return shortCode, uploadResp.SecureURL, nil
 }
 
 func (s *service) GetOriginalURL(shortCode string) (string, error) {
@@ -173,7 +149,7 @@ func (s *service) ListURLs(userID int64) ([]*URL, error) {
 }
 
 func (s *service) GetUserStats(userID int64) ([]*URLStats, error) {
-	return s.repo.GetUserStatsOptimized(userID)
+	return s.repo.GetUserStats(userID)
 }
 
 func (s *service) GetURLByID(id int64) (*URL, error) {
@@ -183,7 +159,17 @@ func (s *service) GetURLByID(id int64) (*URL, error) {
 func (s *service) DeleteURL(id int64) error {
 	return s.repo.DeleteByID(id)
 }
-
+func encodeBase62(num int64) string {
+	if num == 0 {
+		return string(base62[0])
+	}
+	var result []byte
+	for num > 0 {
+		result = append([]byte{base62[num%62]}, result...)
+		num /= 62
+	}
+	return string(result)
+}
 
 func generateShortCode(length int) string {
 	result := make([]byte, length)
@@ -193,7 +179,6 @@ func generateShortCode(length int) string {
 	}
 	return string(result)
 }
-
 
 func validateURL(rawURL string) error {
 	if len(rawURL) > 2048 {
@@ -217,7 +202,6 @@ func validateURL(rawURL string) error {
 		return errors.New("URL must contain a valid host")
 	}
 
-	
 	hostLower := strings.ToLower(u.Host)
 	for _, blocked := range blacklistedDomains {
 		if strings.Contains(hostLower, blocked) {

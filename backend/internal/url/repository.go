@@ -7,14 +7,15 @@ import (
 )
 
 type Repository interface {
-	Create(userID int64, originalURL, shortCode, qrURL string, expiresAt time.Time) error
+	Create(userID int64, originalURL, shortCode, qrURL string, expiresAt time.Time) (int64, error)
 	GetByShortCode(shortCode string) (*URL, error)
 	GetByID(id int64) (*URL, error)
 	FindExistingURL(userID int64, originalURL string) (*URL, error) 
 	List(userID int64) ([]*URL, error)
-	GetUserStatsOptimized(userID int64) ([]*URLStats, error)
+	GetUserStats(userID int64) ([]*URLStats, error)
 	DeleteByID(id int64) error
 	CountURLsCreatedToday(userID int64) (int, error)
+	UpdateShortCodeAndQR(id int64, shortCode, qrURL string) error
 }
 
 type repository struct {
@@ -25,12 +26,13 @@ func NewRepository(db *sql.DB) Repository {
 	return &repository{db: db}
 }
 
-func (r *repository) Create(userID int64, originalURL, shortCode, qrURL string, expiresAt time.Time) error {
-	_, err := r.db.Exec(
-		"INSERT INTO urls (user_id, original_url, short_code, qr_url, expires_at) VALUES ($1,$2,$3,$4,$5)",
+func (r *repository) Create(userID int64, originalURL, shortCode, qrURL string, expiresAt time.Time) (int64, error) {
+	var id int64
+	err := r.db.QueryRow(
+		"INSERT INTO urls (user_id, original_url, short_code, qr_url, expires_at) VALUES ($1,$2,$3,$4,$5) RETURNING id",
 		userID, originalURL, shortCode, qrURL, expiresAt,
-	)
-	return err
+	).Scan(&id)
+	return id, err
 }
 
 func (r *repository) GetByShortCode(shortCode string) (*URL, error) {
@@ -105,10 +107,10 @@ func (r *repository) List(userID int64) ([]*URL, error) {
 }
 
 
-func (r *repository) GetUserStatsOptimized(userID int64) ([]*URLStats, error) {
-	baseURL := os.Getenv("BACKEND_URL"+"/")
+func (r *repository) GetUserStats(userID int64) ([]*URLStats, error) {
+	baseURL := os.Getenv("FRONTEND_URL") + "/"
 	if baseURL == "" {
-		baseURL = "http://localhost:8080/"
+		baseURL = "https://shorty-black.vercel.app/"
 	}
 
 	query := `
@@ -174,4 +176,11 @@ func (r *repository) CountURLsCreatedToday(userID int64) (int, error) {
 		userID,
 	).Scan(&count)
 	return count, err
+}
+func (r *repository) UpdateShortCodeAndQR(id int64, shortCode, qrURL string) error {
+	_, err := r.db.Exec(
+		"UPDATE urls SET short_code=$1, qr_url=$2 WHERE id=$3",
+		shortCode, qrURL, id,
+	)
+	return err
 }
