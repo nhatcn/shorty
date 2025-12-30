@@ -48,7 +48,7 @@ func (h *Handler) CreateShortURL(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, createURLResponse{
-		ShortURL: os.Getenv("FRONTEND_URL") + "/" + shortCode,
+		ShortURL: os.Getenv("FRONTEND_URL") + "/l/" + shortCode,
 		QRURL:    qrURL,
 	})
 }

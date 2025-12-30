@@ -108,7 +108,7 @@ func (r *repository) List(userID int64) ([]*URL, error) {
 
 
 func (r *repository) GetUserStats(userID int64) ([]*URLStats, error) {
-	baseURL := os.Getenv("FRONTEND_URL") + "/"
+	baseURL := os.Getenv("FRONTEND_URL") + "/l/"
 	if baseURL == "" {
 		baseURL = "https://shorty-black.vercel.app/"
 	}

@@ -98,7 +98,7 @@ func (s *service) createNewShortURL(userID int64, originalURL string, expiresAt 
 	if baseURL == "" {
 		baseURL = "https://shorty-black.vercel.app"
 	}
-	baseURL += "/"
+	baseURL += "/l/"
 
 	id, err := s.repo.Create(userID, originalURL, "", "", expiresAt)
 	if err != nil {
