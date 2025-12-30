@@ -44,7 +44,6 @@ Building a URL shortening service that allows:
 
 ### Additional Features
 - User authentication with JWT
-- Custom alias support
 - QR code generation (via Cloudinary)
 - Rate limiting (100 URLs per user per day)
 - Comprehensive URL validation
@@ -217,10 +216,6 @@ Frontend runs at: `http://localhost:3000`
 #### Write-Heavy Traffic
 - **Auto-increment ID**: If multiple servers, DB must handle concurrency
 - **Clicks**: Can use batch insert or append to log → aggregate later
-
-#### Horizontal Scaling
-- Multiple API server instances → database + cache must sync
-- Load balancer to distribute requests
 
 #### Database Sharding/Partitioning
 - When data exceeds hundreds of millions of rows

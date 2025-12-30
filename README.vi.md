@@ -2,7 +2,7 @@
 
 **[Xem bản tiếng Anh](README.md)**
 
-Dịch vụ rút gọn link được xây dựng bằng Golang và React, cho phép người dùng tạo các link ngắn gọn, dễ nhớ kèm theo tính năng theo dõi lượt nhấp và quản lý thời hạn hết hạn.
+Dịch vụ rút gọn link được xây dựng bằng Golang và React, cho phép người dùng tạo các link ngắn gọn, kèm theo tính năng theo dõi lượt nhấp và quản lý thời hạn hết hạn.
 Demo: https://shorty-black.vercel.app/home
 
 ---
@@ -122,7 +122,7 @@ New-Item -Path . -Name ".env" -ItemType "File"
 BE_URL=http://localhost:8080
 ```
 
-**Khởi chạy môi trường phát triển:**
+**Khởi chạy môi trường:**
 ```bash
 npm start
 ```
@@ -159,10 +159,9 @@ Frontend chạy tại: `http://localhost:3000`
 
 1. **Tính dự đoán được của mã rút gọn**: Có thể sử dụng các phương pháp làm xáo trộn ID (XOR, hash) để tránh lộ quy luật tạo link.
 2. **Kiểm tra URL**: Ngăn chặn các địa chỉ nội bộ (localhost, IP riêng) và chỉ cho phép giao thức HTTP/HTTPS.
-3. **Theo dõi lượt nhấp**: Kiểm tra tính hợp lệ của ID để ngăn chặn tấn công injection.
-4. **Giới hạn tốc độ (Rate Limiting)**: Giới hạn 100 URL/ngày để ngăn chặn thư rác.
-5. **URL hết hạn**: Kiểm tra `ExpiresAt` trước khi chuyển hướng.
-6. **Xác thực và phân quyền**: Người dùng chỉ có thể xem hoặc xóa các URL do chính họ tạo ra.
+3. **Giới hạn tốc độ (Rate Limiting)**: Giới hạn 100 URL/ngày để ngăn spam.
+4. **URL hết hạn**: Kiểm tra `ExpiresAt` trước khi chuyển hướng.
+5. **Xác thực và phân quyền**: Người dùng chỉ có thể xem hoặc xóa các URL do chính họ tạo ra.
 
 ---
 
@@ -174,10 +173,10 @@ Frontend chạy tại: `http://localhost:3000`
 - Sử dụng **Redis** để lưu trữ bộ nhớ đệm cho các ánh xạ URL (shortCode → originalURL) nhằm giảm tải cho DB.
 
 #### Ưu tiên Ghi (Write-Heavy)
-- Nếu có nhiều máy chủ, DB phải xử lý đồng thời tốt cho ID tự tăng. Lượt nhấp có thể được lưu theo lô (batch insert) để giảm số lượng lệnh ghi liên tục.
+- Nếu có nhiều máy chủ, DB phải xử lý đồng thời tốt cho ID tự tăng. Lượt nhấp có thể được lưu theo batch insert để giảm số lượng lệnh ghi liên tục.
 
 #### Phân mảnh cơ sở dữ liệu (Sharding/Partitioning)
-- Khi dữ liệu vượt quá hàng trăm triệu dòng, có thể phân chia bảng theo `user_id` hoặc theo khoảng thời gian.
+- Khi dữ liệu vượt quá hàng trăm triệu dòng, Có thể partition table theo user_id % N hoặc theo ngày - ngày.
 
 ---
 
@@ -185,32 +184,32 @@ Frontend chạy tại: `http://localhost:3000`
 
 - **PostgreSQL vs NoSQL**: Chọn PostgreSQL vì giao dịch an toàn và các ràng buộc mạnh mẽ, dù việc mở rộng quy mô cực lớn có thể phức tạp hơn NoSQL.
 - **REST vs GraphQL**: Chọn REST vì sự đơn giản và tốc độ phát triển nhanh cho dự án quy mô vừa và nhỏ.
-- **ID tự tăng + Base62**: Đảm bảo tính duy nhất tuyệt đối nhưng mã rút gọn sẽ tăng dần theo tuần tự, có thể làm lộ thứ tự tạo link.
+- **ID tự tăng + Base62**: Đảm bảo tính duy nhất tuyệt đối 100% nhưng mã rút gọn sẽ tăng dần theo tuần tự, có thể làm lộ thứ tự tạo link.
 
 ---
 
 ## 💡 Challenges & Learnings
 
 ### Các vấn đề gặp phải
-- Lần đầu tiếp cận với Golang, còn lạ lẫm với cú pháp và cấu trúc package.
+- Lần đầu tiếp cận với Golang, còn lạ lẫm với cú pháp và cấu trúc project.
 - Gặp lỗi khi kết nối và triển khai PostgreSQL trực tiếp trên Fly.io.
 
 ### Giải pháp
-- Tự học cấu trúc Golang (handler → service → repository).
-- Chuyển sang sử dụng cơ sở dữ liệu đám mây Neon (PostgreSQL cloud) để đảm bảo độ ổn định và triển khai nhanh.
+- Tự học Golang 
+- Chuyển sang sử dụng Neon (PostgreSQL cloud) để đảm bảo độ ổn định và triển khai nhanh.
 
 ### Bài học rút ra
-- Hiểu rõ luồng hoạt động của Backend trong Golang.
-- Kỹ năng xử lý đồng thời, trùng lặp và giao dịch trong PostgreSQL.
-- Kinh nghiệm triển khai thực tế trên các nền tảng đám mây (Fly.io/Neon).
+- Hiểu flow của Backend trong Golang.
+- Kỹ năng xử lý đồng thời, trùng lặp trong PostgreSQL.
+- Kinh nghiệm deploy trên các clouds (Fly.io/Neon).
 
 ---
 
 ## 🚀 Limitations & Improvements
 1. **Hiện tại còn thiếu gì?**
-   - Chưa dùng ORM nên mã nguồn truy vấn trực tiếp hơi dài.
-   - Chưa có bộ nhớ đệm (caching) cho lượt nhấp hoặc link.
-   - ID chưa được làm xáo trộn (obfuscated).
+   - Chưa dùng ORM nên query trực tiếp hơi dài.
+   - Chưa caching cho lượt nhấp hoặc link.
+   - ID chưa được obfuscated.
 
 2. **Nếu có thêm thời gian?**
    - Tích hợp OCR để đọc link từ hình ảnh hoặc mã QR.
@@ -218,5 +217,6 @@ Frontend chạy tại: `http://localhost:3000`
    - Phân tích sâu hơn về thiết bị, vị trí IP của người nhấp.
 
 3. **Để sẵn sàng cho môi trường Production?**
-   - Cấu hình HTTPS và bảo mật header.
+   - Cấu hình các HTTP security headers nhằm giảm thiểu các lỗ hổng bảo mật web.
    - Thiết lập tự động mở rộng (Auto-scaling) và cân bằng tải (Load Balancer).
+   - Database backup và recovery.
