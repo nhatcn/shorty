@@ -16,6 +16,7 @@ const RoutesConfig = () => {
   return (
     <Routes>
       <Route path="/home" element={<ShortyApp />} />
+      <Route path="" element={<ShortyApp />} />
       <Route path="/login" element={<Shorty />} />
       <Route path="/statistic" element={<Statistics />} />
 

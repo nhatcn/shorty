@@ -224,7 +224,7 @@ export default function ShortyApp() {
             <span className="fw-bold fs-5">Shorty</span>
           </a>
           <div className="d-flex align-items-center gap-3">
-            <a href="https://github.com" className="text-decoration-none text-muted d-flex align-items-center">
+            <a href="https://github.com/nhatcn/shorty" className="text-decoration-none text-muted d-flex align-items-center">
               <Github size={18} className="me-2" />
               GitHub
             </a>

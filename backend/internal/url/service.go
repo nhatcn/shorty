@@ -185,13 +185,19 @@ func validateURL(rawURL string) error {
 		return errors.New("URL too long (max 2048 characters)")
 	}
 
-	if len(rawURL) < 10 {
-		return errors.New("URL too short")
+	if len(rawURL) < 4 {
+		return errors.New("URL too short (minimum 4 characters)")
 	}
 
-	u, err := url.ParseRequestURI(rawURL)
+	normalizedURL := rawURL
+	if !strings.HasPrefix(strings.ToLower(rawURL), "http://") && 
+	   !strings.HasPrefix(strings.ToLower(rawURL), "https://") {
+		normalizedURL = "https://" + rawURL
+	}
+
+	u, err := url.ParseRequestURI(normalizedURL)
 	if err != nil {
-		return fmt.Errorf("invalid URL format")
+		return errors.New("invalid URL format")
 	}
 
 	if u.Scheme != "http" && u.Scheme != "https" {
@@ -202,12 +208,109 @@ func validateURL(rawURL string) error {
 		return errors.New("URL must contain a valid host")
 	}
 
-	hostLower := strings.ToLower(u.Host)
+	hostParts := strings.Split(u.Host, ":")
+	hostname := hostParts[0]
+
+	if hostname == "" {
+		return errors.New("URL must contain a valid hostname")
+	}
+
+	if err := validateHostname(hostname); err != nil {
+		return err
+	}
+
+	hostnameLower := strings.ToLower(hostname)
 	for _, blocked := range blacklistedDomains {
-		if strings.Contains(hostLower, blocked) {
-			return fmt.Errorf("domain '%s' is not allowed", u.Host)
+		if hostnameLower == blocked || strings.HasSuffix(hostnameLower, "."+blocked) {
+			return fmt.Errorf("domain '%s' is not allowed", hostname)
 		}
 	}
 
 	return nil
+}
+
+func validateHostname(hostname string) error {
+	if len(hostname) > 253 {
+		return errors.New("hostname too long (max 253 characters)")
+	}
+
+	if strings.Contains(hostname, "..") {
+		return errors.New("hostname cannot contain consecutive dots")
+	}
+
+	if strings.HasPrefix(hostname, ".") || strings.HasSuffix(hostname, ".") {
+		return errors.New("hostname cannot start or end with a dot")
+	}
+
+	if strings.HasPrefix(hostname, "-") || strings.HasSuffix(hostname, "-") {
+		return errors.New("hostname cannot start or end with a hyphen")
+	}
+
+	parts := strings.Split(strings.ToLower(hostname), ".")
+	
+	if len(parts) < 2 {
+		isIP := isValidIPv4(hostname)
+		if !isIP {
+			return errors.New("hostname must be a valid domain or IP address")
+		}
+		return nil
+	}
+
+	for _, part := range parts {
+		if part == "" {
+			return errors.New("hostname contains empty labels")
+		}
+
+		if len(part) > 63 {
+			return errors.New("hostname label too long (max 63 characters)")
+		}
+
+		if strings.HasPrefix(part, "-") || strings.HasSuffix(part, "-") {
+			return errors.New("hostname labels cannot start or end with hyphen")
+		}
+
+		for _, char := range part {
+			isValid := (char >= 'a' && char <= 'z') ||
+				(char >= 'A' && char <= 'Z') ||
+				(char >= '0' && char <= '9') ||
+				char == '-'
+			
+			if !isValid {
+				return fmt.Errorf("hostname contains invalid character: '%c'", char)
+			}
+		}
+	}
+
+	return nil
+}
+
+func isValidIPv4(host string) bool {
+	parts := strings.Split(host, ".")
+	if len(parts) != 4 {
+		return false
+	}
+
+	for _, part := range parts {
+		if len(part) == 0 || len(part) > 3 {
+			return false
+		}
+
+		num := 0
+		for _, char := range part {
+			if char < '0' || char > '9' {
+				return false
+			}
+			num = num*10 + int(char-'0')
+		}
+
+		if num > 255 {
+			return false
+		}
+
+		if len(part) > 1 && part[0] == '0' {
+			return false
+		}
+	}
+
+	return true
 }
