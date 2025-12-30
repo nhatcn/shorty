@@ -2,8 +2,10 @@ package url
 
 import (
 	"net/http"
+	"os"
 	"strconv"
-	 "time"
+	"time"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -46,7 +48,7 @@ func (h *Handler) CreateShortURL(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, createURLResponse{
-		ShortURL: "http://localhost:8080/" + shortCode,
+		ShortURL: os.Getenv("BACKEND_URL") + shortCode,
 		QRURL:    qrURL,
 	})
 }
