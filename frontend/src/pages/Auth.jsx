@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { setCookie } from '../utils/cookieUltil';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = 'https://backend-wandering-dust-8240.fly.dev';
 
 const authAPI = {
   register: async (username, password) => {

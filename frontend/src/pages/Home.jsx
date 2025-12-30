@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Copy, Link2, TrendingUp, Github, ExternalLink, LogIn, LogOut, Trash2 } from 'lucide-react';
 
-const API_BASE_URL =  "http://localhost:8080"; ;
+const API_BASE_URL =  "https://backend-wandering-dust-8240.fly.dev" ;
 
 
 const getCookie = (name) => {
