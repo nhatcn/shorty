@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { setCookie } from '../utils/cookieUltil';
 
-const API_BASE_URL = process.env.BE_URL ;
+const API_BASE_URL = 'http://localhost:8080';
 
 const authAPI = {
   register: async (username, password) => {
@@ -11,21 +11,23 @@ const authAPI = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
-      
+
       if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('Wrong username or password');
+        if (response.status === 400) {
+          throw new Error('Username already exists');
         }
-        throw new Error('Network error or server issue');
+        throw new Error(`Server error: ${response.status}`);
       }
-      
+
       return response;
     } catch (error) {
-      if (error.message === 'Wrong username or password') {
-        throw error;
+      if (error instanceof TypeError) {
+   
+        throw new Error('Network error. Please check your connection.');
       }
-      throw new Error('Network error. Please check your connection.');
+      throw error; 
     }
+
   },
 
   login: async (username, password) => {
@@ -35,14 +37,14 @@ const authAPI = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
-      
+
       if (!response.ok) {
         if (response.status === 401) {
           throw new Error('Wrong username or password');
         }
         throw new Error('Network error or server issue');
       }
-      
+
       const data = await response.json();
       setCookie('userId', data.userId);
       localStorage.setItem('token', data.token);
@@ -56,7 +58,7 @@ const authAPI = {
   }
 };
 
-export default function Auth({ onLoginSuccess = () => {} }) {
+export default function Auth({ onLoginSuccess = () => { } }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -84,16 +86,16 @@ export default function Auth({ onLoginSuccess = () => {} }) {
         setLoginPassword('');
       } else {
         const data = await authAPI.login(loginUsername, loginPassword);
-        const userData = { 
-          username: loginUsername, 
+        const userData = {
+          username: loginUsername,
           id: Date.now(),
-          token: data.token 
+          token: data.token
         };
-        
+
         setIsLoggedIn(true);
         setCurrentUser(userData);
         onLoginSuccess(userData);
-        
+
         // Redirect to /home
         window.location.href = '/home';
       }
@@ -127,8 +129,8 @@ export default function Auth({ onLoginSuccess = () => {} }) {
         <div className="card shadow-lg border-0" style={{ maxWidth: '450px', width: '100%' }}>
           <div className="card-body p-5">
             <div className="text-center mb-4">
-              <div className="d-inline-flex align-items-center justify-content-center bg-dark text-white rounded mb-3" 
-                   style={{ width: '48px', height: '48px', fontWeight: '700', fontSize: '24px' }}>
+              <div className="d-inline-flex align-items-center justify-content-center bg-dark text-white rounded mb-3"
+                style={{ width: '48px', height: '48px', fontWeight: '700', fontSize: '24px' }}>
                 S
               </div>
               <h2 className="fw-bold mb-2">{isSignUp ? 'Create Account' : 'Welcome Back'}</h2>
@@ -173,7 +175,7 @@ export default function Auth({ onLoginSuccess = () => {} }) {
               />
             </div>
 
-            <button 
+            <button
               onClick={handleAuth}
               className="btn btn-dark btn-lg w-100 mb-3"
               disabled={loading}
@@ -189,7 +191,7 @@ export default function Auth({ onLoginSuccess = () => {} }) {
             </button>
 
             <div className="text-center">
-              <button 
+              <button
                 className="btn btn-link text-decoration-none"
                 onClick={handleToggleMode}
               >
@@ -200,9 +202,9 @@ export default function Auth({ onLoginSuccess = () => {} }) {
         </div>
       )}
 
-      <link 
-        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" 
-        rel="stylesheet" 
+      <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+        rel="stylesheet"
         crossOrigin="anonymous"
       />
     </div>

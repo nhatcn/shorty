@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Copy, Link2, TrendingUp, Github, ExternalLink, LogIn, LogOut, Trash2 } from 'lucide-react';
 
-const API_BASE_URL = process.env.BE_URL ;
+const API_BASE_URL =  "http://localhost:8080"; ;
 
 
 const getCookie = (name) => {
@@ -108,20 +108,18 @@ export default function ShortyApp() {
         })
       });
 
-      if (!response.ok) {
-        if (response.status === 400) {
-          throw new Error('Invalid URL.');
-        } else if (response.status === 401) {
-          throw new Error('Authentication failed. Please login again.');
-        } else if (response.status === 500) {
-          throw new Error('Server error. Please try again later.');
-        } else {
-          throw new Error('Failed to shorten URL. Please try again.');
-        }
-      }
+  
 
       const data = await response.json();
-      
+    
+  if (!response.ok) {
+
+    if (data && data.error) {
+      throw new Error(data.error);
+    } else {
+      throw new Error('Failed to shorten URL. Please try again.');
+    }
+  }
       const newShortUrl = data.short_url;
       setShortUrl(newShortUrl);
       
